@@ -1501,44 +1501,29 @@ function renderChips(pool) {
 }
 
 async function regenerateChips() {
-    const sys = `You generate button labels for a carbon footprint app. Return ONLY valid JSON:
-{"chips":[{"label":"BUTTON_TEXT","value":"FULL_SENTENCE"},...]}
-
-BUTTON_TEXT: concise, 3-16 characters. Examples: "Beef burger", "NYC to Sydney", "Hot shower".
-FULL_SENTENCE: describe ONE SINGLE INSTANCE of the activity — not an annual total.
-Good: "Eating one beef burger", "Flying from New York to Sydney", "Taking one hot shower".
-Bad: "Eating beef burgers every week for a year", "A year of hot showers". Never include time horizons.
-The app multiplies by frequency automatically — just describe the single event.
-
-Rules: generate exactly 6. Mix: transport, food, home energy, consumer goods, digital, recreation.
-Each must be a single person's personal action. Be specific. Be neutral.`;
     try {
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        // We now call our OWN api/chips instead of calling Groq directly
+        const res = await fetch('/api/chips', {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: GROQ_MODEL,
-                messages: [{ role: 'system', content: sys }, { role: 'user', content: 'generate' }],
-                temperature: 0.95, max_tokens: 380,
-                response_format: { type: 'json_object' },
-            }),
+            headers: { 'Content-Type': 'application/json' }
         });
+
         if (!res.ok) return;
-        const raw     = await res.json();
-        const content = raw.choices?.[0]?.message?.content ?? '';
-        const parsed  = JSON.parse(content);
-        const chips   = Array.isArray(parsed) ? parsed : (parsed.chips ?? parsed.activities ?? []);
-        // Reject any chip where the label looks like a template placeholder or is empty/too long
+        
+        const parsed = await res.json();
+        const chips = Array.isArray(parsed) ? parsed : (parsed.chips ?? parsed.activities ?? []);
+        
         const valid = chips.filter(c =>
             c.label && c.value &&
             typeof c.label === 'string' && typeof c.value === 'string' &&
             c.label.length >= 3 && c.label.length <= 22 &&
-            !c.label.includes('chars') && !c.label.includes('≤') &&
-            !c.label.startsWith('<') && !c.label.toUpperCase().includes('BUTTON')
+            !c.label.includes('chars') && !c.label.startsWith('<')
         );
+
         if (valid.length >= 3) renderChips(valid.slice(0, 6));
-        // else: keep the existing chips unchanged
-    } catch { /* non-critical — silently ignore */ }
+    } catch (err) {
+        console.error('Chip generation failed:', err);
+    }
 }
 
 (function seedChips() {
