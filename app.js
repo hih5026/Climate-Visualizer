@@ -1166,43 +1166,26 @@ async function callGroq(activityText) {
 
 
 async function callGroq(activityText) {
-    const sys = `You are a climate science expert. Estimate the CO2 footprint for the user's activity.
-
-RESPOND WITH ONLY VALID JSON — no markdown, no extra text.
-
-Schema:
-{
-  "co2_kg":          <number: CO2e in kg for EXACTLY the activity>,
-  "activity_unit":   <string: one atomic unit, e.g. "one NYC→London flight">,
-  "base_quantity":   <number: count implied by the user's text, default 1>,
-  "fun_fact":           <string: max 12 words, one punchy concrete comparison — NO numbers, just the image>,
-  "humanity_scale":     <string: max 20 words — what it means if all 8 billion people did this>,
-  "suggested_frequency":<string: "once" | "week" | "month" | "year" — "once" for one-time events (a flight, buying a phone), "year" for daily habits (commuting, eating habits), "month" for monthly cycles, "week" for weekly routines>
-}
-
-References: 1yr Netflix≈36kg · NYC-London≈986kg · 1 Bitcoin≈147000kg · annual US car≈4600kg · 1 Big Mac≈4kg`;
-
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    // We send the text to our internal Vercel API instead of Groq's website
+    const res = await fetch('/api/footprint', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            model: GROQ_MODEL,
-            messages: [{ role: 'system', content: sys }, { role: 'user', content: activityText }],
-            temperature: 0.2, max_tokens: 300,
-            response_format: { type: 'json_object' },
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activityText }), 
     });
-    if (!res.ok) throw new Error(`Groq ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const raw = await res.json();
-    const content = raw.choices?.[0]?.message?.content ?? '';
-    let parsed;
-    try { parsed = JSON.parse(content); }
-    catch { const m = content.match(/\{[\s\S]*\}/); if (!m) throw new Error('Unparseable LLM response'); parsed = JSON.parse(m[0]); }
-    if (!Number.isFinite(parsed.co2_kg) || parsed.co2_kg <= 0) throw new Error('Invalid co2_kg from LLM');
+
+    if (!res.ok) {
+        throw new Error(`Cloud Function Error: ${res.status}`);
+    }
+
+    const parsed = await res.json();
+
+    // Keep your safety checks to make sure the 3D bubble has numbers to work with
+    if (!Number.isFinite(parsed.co2_kg) || parsed.co2_kg <= 0) throw new Error('Invalid data');
     parsed.base_quantity        ??= 1;
     parsed.activity_unit        ??= 'unit';
     parsed.humanity_scale       ??= '';
     parsed.suggested_frequency  ??= 'once';
+
     return parsed;
 }
 
