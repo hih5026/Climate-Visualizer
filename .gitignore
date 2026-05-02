@@ -1,0 +1,10 @@
+# Local environment variables (API Keys)
+.env
+.env.local
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Dependencies (if you use npm later)
+node_modules/
