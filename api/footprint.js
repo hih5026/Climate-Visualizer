@@ -1,10 +1,19 @@
 export default async function handler(req, res) {
+    // 1. Only allow POST
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
+    // 2. Check for the API Key immediately
+    const GROQ_KEY = process.env.GROQ_API_KEY;
+    if (!GROQ_KEY) {
+        return res.status(500).json({ error: 'Server Configuration Error: API Key missing.' });
+    }
+
     const { activityText } = req.body;
-    const GROQ_KEY = process.env.GROQ_API_KEY; // This stays secret on Vercel's servers
+    if (!activityText) {
+        return res.status(400).json({ error: 'Activity text is required.' });
+    }
 
     const sys = `You are a climate science expert. Estimate the CO2 footprint for the user's activity.
     RESPOND WITH ONLY VALID JSON.
@@ -37,9 +46,19 @@ export default async function handler(req, res) {
         });
 
         const data = await response.json();
+        
+        // 3. Safety check: Did Groq return a valid choice?
+        if (!data.choices || data.choices.length === 0) {
+            throw new Error('AI failed to return a response.');
+        }
+
         const content = data.choices[0].message.content;
+        
+        // 4. Return the result
         res.status(200).json(JSON.parse(content));
+
     } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch from Groq', details: error.message });
+        console.error("API Error:", error.message);
+        res.status(500).json({ error: 'Failed to process carbon footprint', details: error.message });
     }
 }
