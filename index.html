@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClimVis — Carbon Bubble Visualizer</title>
+    <!-- Three.js global build (r128) + OrbitControls as a plain script -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- GSAP global -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Three.js canvas — fills the full viewport behind the panel -->
+    <canvas id="three-canvas"></canvas>
+
+    <!-- HTML labels rendered on top of the canvas (updated each frame) -->
+    <div id="labels-overlay"></div>
+
+    <!-- ── Left UI Panel ──────────────────────────────────────────── -->
+    <aside id="ui-panel">
+
+        <div class="panel-header">
+            <h1 class="gradient-text">ClimVis</h1>
+            <p class="subtitle">Carbon Bubble Visualizer</p>
+            <div class="unit-toggle-row">
+                <button class="unit-btn active" id="unit-metric">Metric</button>
+                <button class="unit-btn" id="unit-imperial">Imperial</button>
+            </div>
+        </div>
+
+        <!-- Input -->
+        <div class="section">
+            <label class="section-label">What's the activity?</label>
+            <textarea id="main-input" rows="3"
+                placeholder="e.g. Flying a private jet to Paris, Mining 1 Bitcoin, Eating 500 burgers…"
+            ></textarea>
+            <button id="submit-btn">Calculate &amp; Visualize →</button>
+        </div>
+
+        <!-- Quick-start chips — populated randomly by JS each session -->
+        <div class="section">
+            <label class="section-label">Quick start</label>
+            <button id="avg-chip" class="chip chip-anchor">🌍 &nbsp;Average person for one year</button>
+            <div class="chips" id="chips-container"></div>
+        </div>
+
+        <!-- Frequency toggle -->
+        <div class="section">
+            <label class="section-label">Frequency</label>
+            <div class="freq-toggle">
+                <button class="freq-btn active" data-freq="1">Once</button>
+                <button class="freq-btn" data-freq="7">Each day for a week</button>
+                <button class="freq-btn" data-freq="30">Each day for a month</button>
+                <button class="freq-btn" data-freq="365">Each day for a year</button>
+                <button class="freq-btn" data-freq="28470">Each day for a lifetime</button>
+            </div>
+        </div>
+
+        <!-- Population slider -->
+        <div class="section">
+            <label class="section-label">People — <span id="pop-slider-value" class="accent-green">just you</span></label>
+            <input type="range" id="pop-slider" class="scale-slider" min="1" max="10" value="1">
+            <div class="slider-labels">
+                <span>just you</span><span>~25k</span><span>8.1B</span>
+            </div>
+            <div id="quantity-label" class="quantity-label"></div>
+        </div>
+
+        <!-- Loading -->
+        <div id="loading-panel" class="status-box hidden">
+            <div class="spinner"></div>
+            <span>Calculating carbon footprint…</span>
+        </div>
+
+        <!-- Error -->
+        <div id="error-panel" class="status-box error-box hidden">
+            <span id="error-message"></span>
+        </div>
+
+    </aside>
+
+    <!-- ── Impact overlay panels (bottom-right) ──────────────────── -->
+    <div id="impact-bar" class="hidden">
+
+        <!-- Results card -->
+        <div id="results-panel" class="impact-card results-card hidden">
+            <div class="impact-title">TOTAL CO₂ EQUIVALENT</div>
+            <div>
+                <div id="co2-amount" class="co2-big">—</div>
+                <div id="pop-context" class="pop-context">—</div>
+            </div>
+            <div class="result-divider"></div>
+            <div>
+                <div class="impact-title">COMPARABLE TO</div>
+                <div id="comparison-name" class="result-value accent-blue">—</div>
+                <div id="comparison-scale" class="result-sub">—</div>
+            </div>
+            <div class="result-divider"></div>
+            <p id="fun-fact" class="fun-fact">—</p>
+            <button id="zoom-btn" class="zoom-btn hidden">⊡ &nbsp;Zoom to Fit</button>
+        </div>
+
+        <!-- Thermometer card -->
+        <div class="impact-card">
+            <div class="impact-title">WARMING CONTRIBUTION</div>
+            <div class="impact-body">
+                <svg class="thermo-svg" viewBox="0 0 44 170" xmlns="http://www.w3.org/2000/svg">
+                    <!-- tube outline -->
+                    <rect x="17" y="10" width="10" height="120" rx="5"
+                          fill="rgba(255,255,255,0.06)" stroke="rgba(255,100,60,0.35)" stroke-width="1.5"/>
+                    <!-- tube fill (animated via JS) -->
+                    <rect id="temp-tube-fill" x="19" y="130" width="6" height="0" rx="2" fill="#ff5533"/>
+                    <!-- bulb -->
+                    <circle cx="22" cy="138" r="12" fill="rgba(255,85,50,0.2)" stroke="rgba(255,100,60,0.4)" stroke-width="1.5"/>
+                    <circle cx="22" cy="138" r="7"  fill="#ff5533"/>
+                    <!-- tick marks -->
+                    <line x1="27" y1="20"  x2="31" y2="20"  stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                    <line x1="27" y1="50"  x2="31" y2="50"  stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                    <line x1="27" y1="80"  x2="31" y2="80"  stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                    <line x1="27" y1="110" x2="31" y2="110" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                    <line x1="27" y1="130" x2="31" y2="130" stroke="rgba(255,100,60,0.5)"  stroke-width="1"/>
+                </svg>
+                <div class="impact-text-col">
+                    <div class="impact-value" id="temp-value">—</div>
+                    <div class="impact-sub" id="temp-sub">of 1.5 °C budget used</div>
+                    <div class="impact-note">warming this CO₂ causes</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ocean rise card -->
+        <div class="impact-card">
+            <div class="impact-title">SEA LEVEL IMPACT</div>
+            <div class="impact-body">
+                <svg class="ocean-svg" viewBox="0 0 120 170" xmlns="http://www.w3.org/2000/svg">
+                    <!-- sky gradient -->
+                    <defs>
+                        <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%"   stop-color="#0a1530" stop-opacity="0.8"/>
+                            <stop offset="100%" stop-color="#0a2050" stop-opacity="0.3"/>
+                        </linearGradient>
+                        <linearGradient id="seaGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%"   stop-color="#1a7fc4"/>
+                            <stop offset="100%" stop-color="#0a3a6e"/>
+                        </linearGradient>
+                    </defs>
+                    <rect x="0" y="0" width="120" height="170" fill="url(#skyGrad)" rx="0"/>
+                    <!-- coast silhouette -->
+                    <path d="M0,110 L30,110 L30,85 L55,80 L80,85 L80,110 L120,110 L120,170 L0,170 Z"
+                          fill="rgba(60,45,30,0.75)"/>
+                    <!-- base ocean level -->
+                    <rect x="0" y="110" width="120" height="60" fill="url(#seaGrad)" opacity="0.55"/>
+                    <!-- rising water (animated path via JS) -->
+                    <path id="ocean-wave-fill"
+                          d="M0,160 Q30,154 60,160 Q90,166 120,160 L120,170 L0,170 Z"
+                          fill="#1a9fe0" opacity="0.8"/>
+                    <!-- waterline tick -->
+                    <line x1="0" y1="110" x2="120" y2="110" stroke="rgba(100,200,255,0.3)" stroke-width="1" stroke-dasharray="4,3"/>
+                </svg>
+                <div class="impact-text-col">
+                    <div class="impact-value" id="ocean-value">—</div>
+                    <div class="impact-sub" id="ocean-sub">sea level rise</div>
+                    <div class="impact-note">long-term contribution</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script defer src="app.js"></script>
+</body>
+</html>
